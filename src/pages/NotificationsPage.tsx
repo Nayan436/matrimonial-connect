@@ -1,12 +1,12 @@
 import React from 'react';
-import { Bell, Heart, MessageCircle, CreditCard, Info } from 'lucide-react';
+import { Bell, Heart, MessageCircle, CreditCard, Info, type LucideIcon } from 'lucide-react';
 import { AppLayout, PageHeader } from '../components/layout/AppLayout';
 import { Button } from '../components/ui/Button';
 import { useApp } from '../context/AppContext';
 import { formatTime } from '../utils/storage';
 import type { NotificationType } from '../types';
 
-const iconMap: Record<NotificationType, React.ComponentType<{size?:number;className?:string}>> = {
+const iconMap: Record<NotificationType, LucideIcon> = {
   interest: Heart,
   match: Heart,
   message: MessageCircle,

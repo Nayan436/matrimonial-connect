@@ -72,6 +72,7 @@ export default function CreateProfilePage() {
       isActivated: state.isActivated,
       createdAt: new Date().toISOString(),
       ...form,
+      gender: form.gender as 'male' | 'female' | 'other',
       age,
       isVerified: false,
       profileCompletion: completion,

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Heart, X, MapPin, GraduationCap, Briefcase, Users, Utensils, Eye, EyeOff, Flag } from 'lucide-react';
+import { ArrowLeft, Heart, X, MapPin, GraduationCap, Briefcase, Users, Utensils, Eye, EyeOff, Flag, type LucideIcon } from 'lucide-react';
 import { AppLayout } from '../components/layout/AppLayout';
 import { Button } from '../components/ui/Button';
 import { VerifiedBadge, InterestStatusBadge } from '../components/ui/Badge';
@@ -46,7 +46,7 @@ export default function ViewProfilePage() {
     </div>
   );
 
-  const InfoRow = ({ icon: Icon, label, value }: { icon: React.ComponentType<{size?:number;className?:string}>; label: string; value: string }) => (
+  const InfoRow = ({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value: string }) => (
     <div className="flex items-center gap-3 py-2 border-b border-gray-50 last:border-0">
       <Icon size={15} className="text-pink-500 flex-shrink-0" />
       <span className="text-xs text-gray-500 w-28 flex-shrink-0">{label}</span>
