@@ -1,0 +1,78 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─── Base ─────────────────────────────────────── */
+*, *::before, *::after {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  background: #f3f4f6;
+  overflow-x: hidden;
+}
+
+/* ─── Custom scrollbar ─────────────────────────── */
+::-webkit-scrollbar { width: 0px; }
+
+/* ─── Safe area ────────────────────────────────── */
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* ─── Prevent iOS bounce on body ───────────────── */
+#root {
+  position: relative;
+  min-height: 100vh;
+}
+
+/* ─── Gradient text utility ────────────────────── */
+.gradient-text {
+  background: linear-gradient(135deg, #C2185B 0%, #7B1FA2 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ─── Card drag cursor ─────────────────────────── */
+.swipe-card {
+  touch-action: none;
+  user-select: none;
+}
+
+/* ─── Animations ───────────────────────────────── */
+@keyframes slideUp {
+  from { transform: translateY(20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes bounceIn {
+  0% { transform: scale(0.85); opacity: 0; }
+  60% { transform: scale(1.05); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.animate-slide-up {
+  animation: slideUp 0.3s ease-out;
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.25s ease-out;
+}
+
+.animate-bounce-in {
+  animation: bounceIn 0.45s cubic-bezier(0.36, 0.07, 0.19, 0.97);
+}
