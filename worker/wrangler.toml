@@ -1,0 +1,11 @@
+name = "matrimonial-worker"
+main = "src/index.ts"
+compatibility_date = "2024-01-01"
+
+# -- Set these secrets via: wrangler secret put SECRET_NAME -------------------
+# FAST2SMS_API_KEY       - from fast2sms.com dashboard
+# RAZORPAY_KEY_ID        - from Razorpay dashboard
+# RAZORPAY_KEY_SECRET    - from Razorpay dashboard
+# FIREBASE_PROJECT_ID    - your Firebase project ID
+# FIREBASE_CLIENT_EMAIL  - from Firebase service account JSON
+# FIREBASE_PRIVATE_KEY   - from Firebase service account JSON (the long RSA key)
