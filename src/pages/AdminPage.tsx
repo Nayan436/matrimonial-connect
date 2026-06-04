@@ -1,250 +1,137 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Users, CreditCard, TrendingUp, AlertTriangle, Search, ChevronRight, ArrowLeft, BarChart3, CheckCircle, XCircle, Ban } from 'lucide-react';
-import { MOCK_PROFILES } from '../data/mockProfiles';
+import {
+  Users, CheckCircle, XCircle, LogOut, Search, ExternalLink, Clock, RefreshCw,
+} from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
+import { Badge } from '../components/ui/Badge';
+import { Modal } from '../components/ui/Modal';
+import { adminLogout, isAdminLoggedIn } from './AdminLoginPage';
+import {
+  listenAllPaymentRequests, approvePayment, rejectPayment,
+  type PaymentRequest,
+} from '../services/payment.service';
+import { formatTime } from '../utils/storage';
 
-type AdminTab = 'dashboard' | 'users' | 'payments';
-
-const STATS = [
-  { label: 'Total Users', value: '2,145', icon: Users, color: 'bg-blue-100 text-blue-600', trend: '+12%' },
-  { label: 'Activated', value: '1,420', icon: CheckCircle, color: 'bg-green-100 text-green-600', trend: '+8%' },
-  { label: 'Revenue', value: '₹7,10,000', icon: CreditCard, color: 'bg-purple-100 text-purple-600', trend: '+15%' },
-  { label: 'Matches', value: '3,520', icon: TrendingUp, color: 'bg-pink-100 text-pink-600', trend: '+22%' },
-  { label: 'Interests', value: '12,450', icon: BarChart3, color: 'bg-amber-100 text-amber-600', trend: '+18%' },
-  { label: 'Reports', value: '34', icon: AlertTriangle, color: 'bg-red-100 text-red-600', trend: '-5%' },
-];
-
-const MOCK_USERS = MOCK_PROFILES.map((p, i) => ({
-  id: p.id,
-  name: `${p.firstName} ${p.lastName}`,
-  mobile: `98${String(Math.floor(Math.random() * 90000000 + 10000000))}`,
-  city: p.city,
-  occupation: p.occupation,
-  isActivated: i % 3 !== 2,
-  isVerified: p.isVerified,
-  status: i === 3 ? 'suspended' : 'active',
-  joinedAt: new Date(Date.now() - Math.random() * 90 * 24 * 3600000).toLocaleDateString('en-IN'),
-}));
-
-const MOCK_PAYMENTS = MOCK_PROFILES.slice(0, 8).map((p, i) => ({
-  id: `TXN-DEMO-${1000 + i}`,
-  user: `${p.firstName} ${p.lastName}`,
-  amount: i % 3 === 0 ? 999 : 499,
-  plan: i % 3 === 0 ? 'Lifetime' : 'Standard',
-  method: ['UPI', 'Credit Card', 'Net Banking', 'Wallet'][i % 4],
-  date: new Date(Date.now() - i * 2 * 24 * 3600000).toLocaleDateString('en-IN'),
-  status: 'Success',
-}));
+type Tab = 'payments' | 'users';
 
 export default function AdminPage() {
   const navigate = useNavigate();
-  const [tab, setTab] = useState<AdminTab>('dashboard');
+  const [tab, setTab] = useState<Tab>('payments');
+  const [requests, setRequests] = useState<PaymentRequest[]>([]);
+  const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('pending');
   const [search, setSearch] = useState('');
-  const [activationFee, setActivationFee] = useState('499');
-  const [editingFee, setEditingFee] = useState(false);
+  const [selected, setSelected] = useState<PaymentRequest | null>(null);
+  const [rejectReason, setRejectReason] = useState('');
+  const [rejectModal, setRejectModal] = useState(false);
+  const [actionLoading, setActionLoading] = useState(false);
 
-  const filteredUsers = MOCK_USERS.filter(u =>
-    u.name.toLowerCase().includes(search.toLowerCase()) ||
-    u.mobile.includes(search) ||
-    u.city.toLowerCase().includes(search.toLowerCase())
-  );
+  useEffect(() => { if (!isAdminLoggedIn()) navigate('/admin', { replace: true }); }, [navigate]);
+  useEffect(() => { const unsub = listenAllPaymentRequests(setRequests); return unsub; }, []);
 
-  const TABS: { id: AdminTab; label: string }[] = [
-    { id: 'dashboard', label: 'Dashboard' },
-    { id: 'users', label: 'Users' },
-    { id: 'payments', label: 'Payments' },
-  ];
+  const handleLogout = () => { adminLogout(); navigate('/admin'); };
+  const handleApprove = async (req: PaymentRequest) => {
+    setActionLoading(true);
+    try { await approvePayment(req.id, req.userId); setSelected(null); }
+    finally { setActionLoading(false); }
+  };
+  const handleReject = async () => {
+    if (!selected) return;
+    setActionLoading(true);
+    try { await rejectPayment(selected.id, rejectReason || 'Payment could not be verified'); setSelected(null); setRejectModal(false); setRejectReason(''); }
+    finally { setActionLoading(false); }
+  };
+
+  const filtered = requests.filter(r => {
+    if (filter !== 'all' && r.status !== filter) return false;
+    const q = search.toLowerCase();
+    return !q || r.payerName.toLowerCase().includes(q) || r.mobile.includes(q) || r.transactionId.toLowerCase().includes(q);
+  });
+  const stats = { total: requests.length, pending: requests.filter(r=>r.status==='pending').length, approved: requests.filter(r=>r.status==='approved').length, revenue: requests.filter(r=>r.status==='approved').reduce((s,r)=>s+r.amount,0) };
+  const statusBadge = (s: string) => { if (s==='pending') return <Badge variant="yellow"><Clock size={10}/> Pending</Badge>; if (s==='approved') return <Badge variant="green"><CheckCircle size={10}/> Approved</Badge>; return <Badge variant="red"><XCircle size={10}/> Rejected</Badge>; };
 
   return (
-    <div className="min-h-screen bg-gray-50 max-w-md mx-auto">
-      {/* Header */}
-      <div className="bg-brand-gradient text-white px-4 pt-12 pb-4">
-        <div className="flex items-center gap-3 mb-1">
-          <button onClick={() => navigate('/')} className="p-1.5 rounded-xl bg-white/20 hover:bg-white/30">
-            <ArrowLeft size={18} />
-          </button>
-          <div>
-            <h1 className="text-xl font-extrabold">Admin Panel</h1>
-            <p className="text-white/70 text-xs">Matrimonial Connect Management</p>
-          </div>
-        </div>
+    <div className="min-h-screen bg-gray-50 max-w-2xl mx-auto">
+      <div className="bg-brand-gradient text-white px-4 pt-12 pb-4 flex items-center justify-between">
+        <div><h1 className="text-xl font-extrabold">Admin Panel</h1><p className="text-white/70 text-xs">Matrimonial Connect</p></div>
+        <button onClick={handleLogout} className="flex items-center gap-1.5 bg-white/20 px-3 py-1.5 rounded-xl text-sm font-semibold"><LogOut size={14}/> Logout</button>
       </div>
 
-      {/* Tabs */}
+      <div className="grid grid-cols-4 gap-2 px-4 py-3">
+        {[{label:'Total',value:stats.total},{label:'Pending',value:stats.pending,alert:stats.pending>0},{label:'Approved',value:stats.approved},{label:'Revenue',value:'Rs.'+stats.revenue.toLocaleString('en-IN')}].map(s=>(
+          <div key={s.label} className={'rounded-2xl p-3 text-center '+(s.alert?'bg-amber-50 border border-amber-200':'bg-white')}>
+            <p className={'text-xl font-extrabold '+(s.alert?'text-amber-600':'text-gray-900')}>{s.value}</p>
+            <p className="text-[10px] text-gray-500">{s.label}</p>
+          </div>
+        ))}
+      </div>
+
       <div className="flex bg-white border-b border-gray-100 sticky top-0 z-20">
-        {TABS.map(t => (
-          <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
-            className={`flex-1 py-3 text-sm font-semibold transition-colors border-b-2 ${
-              tab === t.id ? 'border-pink-500 text-pink-600' : 'border-transparent text-gray-500'
-            }`}
-          >
-            {t.label}
+        {(['payments','users'] as Tab[]).map(t=>(
+          <button key={t} onClick={()=>setTab(t)} className={'flex-1 py-3 text-sm font-semibold border-b-2 '+(tab===t?'border-pink-500 text-pink-600':'border-transparent text-gray-500')}>
+            {t==='payments'?'Payment Requests':'Users'}
+            {t==='payments'&&stats.pending>0&&<span className="ml-1.5 bg-amber-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">{stats.pending}</span>}
           </button>
         ))}
       </div>
 
       <div className="px-4 py-4 pb-10">
-        {/* ── Dashboard ── */}
-        {tab === 'dashboard' && (
-          <>
-            <div className="grid grid-cols-2 gap-3 mb-4">
-              {STATS.map(s => (
-                <div key={s.label} className="bg-white rounded-3xl p-4 shadow-sm">
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-2 ${s.color}`}>
-                    <s.icon size={18} />
-                  </div>
-                  <p className="text-xl font-extrabold text-gray-900">{s.value}</p>
-                  <p className="text-xs text-gray-500">{s.label}</p>
-                  <p className={`text-xs font-semibold mt-0.5 ${s.trend.startsWith('+') ? 'text-green-500' : 'text-red-500'}`}>{s.trend} this month</p>
+        {tab==='payments'&&(<>
+          <div className="flex gap-2 mb-3 overflow-x-auto pb-1">
+            {(['pending','approved','rejected','all'] as const).map(f=>(
+              <button key={f} onClick={()=>setFilter(f)} className={'flex-shrink-0 px-3 py-1.5 rounded-xl text-xs font-semibold capitalize '+(filter===f?'bg-pink-500 text-white':'bg-white text-gray-600 border border-gray-200')}>{f}</button>
+            ))}
+          </div>
+          <div className="mb-3"><Input placeholder="Search name, mobile, UTR..." value={search} onChange={e=>setSearch(e.target.value)} prefix={<Search size={14} className="text-gray-400"/>}/></div>
+          {filtered.length===0?(<div className="text-center py-12 text-gray-400"><RefreshCw size={36} className="mx-auto mb-3 opacity-30"/><p className="font-medium">No {filter} requests</p></div>):(
+            <div className="space-y-3">{filtered.map(req=>(
+              <button key={req.id} onClick={()=>setSelected(req)} className="w-full bg-white rounded-3xl p-4 shadow-sm text-left hover:shadow-md transition-shadow">
+                <div className="flex items-start justify-between mb-2">
+                  <div><p className="font-bold text-gray-900">{req.payerName}</p><p className="text-xs text-gray-500">+91 {req.mobile}</p></div>
+                  <div className="flex flex-col items-end gap-1">{statusBadge(req.status)}<p className="font-extrabold text-pink-600 text-sm">Rs.{req.amount}</p></div>
                 </div>
-              ))}
-            </div>
-
-            {/* Activation Fee Settings */}
-            <div className="bg-white rounded-3xl p-4 shadow-sm mb-4">
-              <h3 className="font-bold text-gray-900 mb-3">Activation Fee Settings</h3>
-              <div className="flex gap-3 mb-3">
-                <div className="flex-1">
-                  <p className="text-xs text-gray-500 mb-1">Standard Plan (₹)</p>
-                  {editingFee ? (
-                    <input type="number" value={activationFee} onChange={e => setActivationFee(e.target.value)}
-                      className="w-full border-2 border-pink-400 rounded-xl px-3 py-2 text-sm font-bold text-gray-900 outline-none" />
-                  ) : (
-                    <p className="text-2xl font-extrabold text-pink-600">₹{activationFee}</p>
-                  )}
+                <div className="flex items-center justify-between">
+                  <div><p className="text-xs text-gray-500 font-mono uppercase">{req.transactionId}</p><p className="text-[10px] text-gray-400 mt-0.5">{req.submittedAt?formatTime(req.submittedAt):''}</p></div>
+                  <span className="text-xs font-semibold capitalize bg-purple-50 text-purple-700 px-2 py-0.5 rounded-full">{req.plan}</span>
                 </div>
-                <div className="flex-1">
-                  <p className="text-xs text-gray-500 mb-1">Lifetime Plan (₹)</p>
-                  <p className="text-2xl font-extrabold text-purple-600">₹999</p>
-                </div>
-              </div>
-              <Button
-                variant={editingFee ? 'primary' : 'outline'}
-                size="sm"
-                fullWidth
-                onClick={() => setEditingFee(f => !f)}
-              >
-                {editingFee ? '✓ Save Fee' : 'Edit Activation Fee'}
-              </Button>
-            </div>
-
-            {/* Recent Activity */}
-            <div className="bg-white rounded-3xl p-4 shadow-sm">
-              <h3 className="font-bold text-gray-900 mb-3">Recent Activity</h3>
-              <div className="space-y-3">
-                {[
-                  { text: 'Priya Shah activated profile', time: '2 min ago', icon: '✅' },
-                  { text: 'New report filed against ID #p7', time: '15 min ago', icon: '⚠️' },
-                  { text: 'Sneha Jain verified', time: '1 hr ago', icon: '🔵' },
-                  { text: '₹999 payment received from Anjali P.', time: '2 hr ago', icon: '💳' },
-                  { text: 'User ID #p4 suspended', time: '5 hr ago', icon: '🚫' },
-                ].map((a, i) => (
-                  <div key={i} className="flex items-center gap-3 py-2 border-b border-gray-50 last:border-0">
-                    <span className="text-xl">{a.icon}</span>
-                    <div className="flex-1">
-                      <p className="text-sm font-medium text-gray-800">{a.text}</p>
-                      <p className="text-xs text-gray-400">{a.time}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </>
-        )}
-
-        {/* ── Users ── */}
-        {tab === 'users' && (
-          <>
-            <div className="mb-3">
-              <Input
-                placeholder="Search by name, mobile, city..."
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                prefix={<Search size={15} className="text-gray-400" />}
-              />
-            </div>
-            <div className="space-y-2">
-              {filteredUsers.map(user => (
-                <div key={user.id} className="bg-white rounded-3xl p-4 shadow-sm">
-                  <div className="flex items-start justify-between mb-2">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <p className="font-bold text-gray-900 text-sm">{user.name}</p>
-                        {user.status === 'suspended' && (
-                          <span className="bg-red-100 text-red-600 text-[10px] font-bold px-2 py-0.5 rounded-full">SUSPENDED</span>
-                        )}
-                      </div>
-                      <p className="text-xs text-gray-500">{user.mobile} · {user.city}</p>
-                      <p className="text-xs text-gray-500">{user.occupation} · Joined {user.joinedAt}</p>
-                    </div>
-                    <div className="flex flex-col gap-1 items-end">
-                      {user.isActivated && <span className="bg-green-100 text-green-600 text-[10px] font-bold px-2 py-0.5 rounded-full">ACTIVATED</span>}
-                      {user.isVerified && <span className="bg-blue-100 text-blue-600 text-[10px] font-bold px-2 py-0.5 rounded-full">VERIFIED</span>}
-                    </div>
-                  </div>
-                  <div className="flex gap-2">
-                    <button className="flex-1 py-1.5 text-xs font-semibold border border-green-200 text-green-600 rounded-xl hover:bg-green-50 transition-colors flex items-center justify-center gap-1">
-                      <CheckCircle size={11} />Activate
-                    </button>
-                    <button className="flex-1 py-1.5 text-xs font-semibold border border-red-200 text-red-500 rounded-xl hover:bg-red-50 transition-colors flex items-center justify-center gap-1">
-                      <Ban size={11} />Suspend
-                    </button>
-                    <button className="flex-1 py-1.5 text-xs font-semibold border border-gray-200 text-gray-500 rounded-xl hover:bg-gray-50 transition-colors flex items-center justify-center gap-1">
-                      <XCircle size={11} />Delete
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </>
-        )}
-
-        {/* ── Payments ── */}
-        {tab === 'payments' && (
-          <>
-            {/* Revenue summary */}
-            <div className="bg-brand-gradient rounded-3xl p-4 text-white mb-4">
-              <p className="text-sm opacity-80 mb-1">Total Revenue This Month</p>
-              <p className="text-3xl font-extrabold">₹7,10,000</p>
-              <div className="flex gap-6 mt-3">
-                <div>
-                  <p className="text-xs opacity-70">Standard Plans</p>
-                  <p className="font-bold">₹4,40,000</p>
-                </div>
-                <div>
-                  <p className="text-xs opacity-70">Lifetime Plans</p>
-                  <p className="font-bold">₹2,70,000</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              {MOCK_PAYMENTS.map(p => (
-                <div key={p.id} className="bg-white rounded-3xl p-4 shadow-sm">
-                  <div className="flex items-center justify-between mb-1">
-                    <p className="font-bold text-gray-900 text-sm">{p.user}</p>
-                    <p className="font-extrabold text-green-600">₹{p.amount}</p>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-xs text-gray-500">{p.plan} · {p.method}</p>
-                      <p className="text-xs text-gray-400 mt-0.5">{p.date}</p>
-                    </div>
-                    <div>
-                      <span className="bg-green-100 text-green-600 text-[10px] font-bold px-2 py-0.5 rounded-full">SUCCESS</span>
-                    </div>
-                  </div>
-                  <p className="text-[10px] text-gray-400 font-mono mt-1">{p.id}</p>
-                </div>
-              ))}
-            </div>
-          </>
-        )}
+              </button>
+            ))}</div>
+          )}
+        </>)}
+        {tab==='users'&&(<div className="text-center py-16 text-gray-400"><Users size={40} className="mx-auto mb-3 opacity-30"/><p className="font-medium text-gray-600">User list loads from Firestore once Firebase is connected.</p></div>)}
       </div>
+
+      {selected&&(
+        <Modal open title="Payment Request" onClose={()=>setSelected(null)}>
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              {[{l:'Name',v:selected.payerName},{l:'Mobile',v:'+91 '+selected.mobile},{l:'Plan',v:selected.plan},{l:'Amount',v:'Rs.'+selected.amount}].map(i=>(
+                <div key={i.l} className="bg-gray-50 rounded-2xl p-3"><p className="text-xs text-gray-500">{i.l}</p><p className="font-semibold text-gray-900 text-sm capitalize">{i.v}</p></div>
+              ))}
+            </div>
+            <div className="bg-gray-50 rounded-2xl p-3"><p className="text-xs text-gray-500 mb-0.5">UTR / Transaction ID</p><p className="font-mono font-semibold text-gray-900 text-sm uppercase select-all">{selected.transactionId}</p></div>
+            <div className="bg-gray-50 rounded-2xl p-3">
+              <p className="text-xs text-gray-500 mb-2">Payment Screenshot</p>
+              <img src={selected.screenshotUrl} alt="proof" className="w-full rounded-xl object-contain max-h-52 cursor-pointer" onClick={()=>window.open(selected.screenshotUrl,'_blank')}/>
+              <a href={selected.screenshotUrl} target="_blank" rel="noreferrer" className="flex items-center gap-1 text-xs text-pink-600 font-medium mt-1.5"><ExternalLink size={11}/> Open full size</a>
+            </div>
+            <div className="flex items-center justify-between text-xs text-gray-400 px-1"><span>Submitted {selected.submittedAt?formatTime(selected.submittedAt):''}</span>{statusBadge(selected.status)}</div>
+            {selected.status==='pending'&&(<div className="flex gap-3 pt-2"><Button variant="danger" size="md" fullWidth onClick={()=>setRejectModal(true)} icon={<XCircle size={15}/>}>Reject</Button><Button size="md" fullWidth loading={actionLoading} onClick={()=>handleApprove(selected)} icon={<CheckCircle size={15}/>}>Approve</Button></div>)}
+            {selected.status==='rejected'&&selected.rejectionReason&&(<div className="bg-red-50 border border-red-200 rounded-2xl p-3"><p className="text-xs text-red-600"><span className="font-semibold">Reason:</span> {selected.rejectionReason}</p></div>)}
+          </div>
+        </Modal>
+      )}
+
+      <Modal open={rejectModal} onClose={()=>setRejectModal(false)} title="Reason for Rejection">
+        <p className="text-sm text-gray-500 mb-3">This will be shown to the user.</p>
+        <div className="space-y-2 mb-4">
+          {['Payment amount incorrect','UTR number mismatch','Screenshot unclear or fake','Could not verify payment'].map(r=>(
+            <button key={r} onClick={()=>setRejectReason(r)} className={'w-full text-left text-sm px-4 py-2.5 rounded-2xl border '+(rejectReason===r?'border-red-400 bg-red-50 text-red-700':'border-gray-200 hover:bg-gray-50 text-gray-700')}>{r}</button>
+          ))}
+        </div>
+        <div className="flex gap-3"><Button variant="ghost" size="md" fullWidth onClick={()=>setRejectModal(false)}>Cancel</Button><Button variant="danger" size="md" fullWidth loading={actionLoading} onClick={handleReject}>Confirm Reject</Button></div>
+      </Modal>
     </div>
   );
 }

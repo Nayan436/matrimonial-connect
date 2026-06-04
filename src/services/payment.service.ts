@@ -1,98 +1,105 @@
-import { doc, addDoc, collection, updateDoc, serverTimestamp } from 'firebase/firestore';
+import {
+  collection, addDoc, doc, updateDoc,
+  serverTimestamp, query, where, onSnapshot,
+  orderBy, type Unsubscribe,
+} from 'firebase/firestore';
 import { db } from '../config/firebase';
-import { WORKER_URL, RAZORPAY_KEY_ID, PLANS } from '../config/constants';
-import { setActivated } from './profile.service';
+import { uploadPhoto } from './storage.service';
 
-declare global {
-  interface Window {
-    Razorpay: new (options: RazorpayOptions) => { open(): void };
-  }
-}
-
-interface RazorpayOptions {
-  key: string;
+export interface PaymentRequest {
+  id: string;
+  userId: string;
+  mobile: string;
+  plan: 'basic' | 'lifetime';
   amount: number;
-  currency: string;
-  name: string;
-  description: string;
-  order_id: string;
-  prefill: { contact: string };
-  theme: { color: string };
-  handler(response: { razorpay_payment_id: string; razorpay_order_id: string; razorpay_signature: string }): void;
-  modal: { ondismiss(): void };
+  payerName: string;
+  transactionId: string;
+  screenshotUrl: string;
+  status: 'pending' | 'approved' | 'rejected';
+  submittedAt: string;
+  reviewedAt?: string;
+  rejectionReason?: string;
 }
 
-// Load Razorpay script dynamically
-function loadRazorpayScript(): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (window.Razorpay) { resolve(); return; }
-    const s = document.createElement('script');
-    s.src = 'https://checkout.razorpay.com/v1/checkout.js';
-    s.onload = () => resolve();
-    s.onerror = () => reject(new Error('Failed to load Razorpay'));
-    document.body.appendChild(s);
-  });
-}
-
-export async function initiatePayment(
+// User submits payment proof
+export async function submitPaymentRequest(
   uid: string,
   mobile: string,
-  plan: 'basic' | 'lifetime'
-): Promise<{ transactionId: string }> {
-  await loadRazorpayScript();
+  plan: 'basic' | 'lifetime',
+  amount: number,
+  payerName: string,
+  transactionId: string,
+  screenshotFile: File
+): Promise<string> {
+  // Upload screenshot to Firebase Storage
+  const screenshotUrl = await uploadPhoto(uid + '/payment-proofs', screenshotFile);
 
-  const planInfo = PLANS[plan];
-
-  // Create order via Worker (keeps Razorpay secret key server-side)
-  const orderRes = await fetch(`${WORKER_URL}/api/payment/create-order`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ amount: planInfo.price, plan }),
+  const ref = await addDoc(collection(db, 'payment_requests'), {
+    userId: uid,
+    mobile,
+    plan,
+    amount,
+    payerName,
+    transactionId: transactionId.trim().toUpperCase(),
+    screenshotUrl,
+    status: 'pending',
+    submittedAt: serverTimestamp(),
   });
-  const { orderId } = await orderRes.json() as { orderId: string };
+  return ref.id;
+}
 
-  return new Promise((resolve, reject) => {
-    const rzp = new window.Razorpay({
-      key: RAZORPAY_KEY_ID,
-      amount: planInfo.price * 100,
-      currency: 'INR',
-      name: 'Matrimonial Connect',
-      description: `${planInfo.label} Activation`,
-      order_id: orderId,
-      prefill: { contact: mobile },
-      theme: { color: '#C2185B' },
-      handler: async (response) => {
-        // Verify payment via Worker
-        const verifyRes = await fetch(`${WORKER_URL}/api/payment/verify`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            razorpay_order_id: response.razorpay_order_id,
-            razorpay_payment_id: response.razorpay_payment_id,
-            razorpay_signature: response.razorpay_signature,
-          }),
-        });
-        const { success } = await verifyRes.json() as { success: boolean };
-        if (!success) { reject(new Error('Payment verification failed')); return; }
+// Admin approves ? activates user
+export async function approvePayment(requestId: string, userId: string): Promise<void> {
+  await updateDoc(doc(db, 'payment_requests', requestId), {
+    status: 'approved',
+    reviewedAt: serverTimestamp(),
+  });
+  await updateDoc(doc(db, 'users', userId), {
+    isActivated: true,
+    activationDate: serverTimestamp(),
+  });
+}
 
-        // Record in Firestore
-        await addDoc(collection(db, 'payments'), {
-          userId: uid,
-          plan,
-          amount: planInfo.price,
-          razorpayOrderId: response.razorpay_order_id,
-          razorpayPaymentId: response.razorpay_payment_id,
-          status: 'success',
-          createdAt: serverTimestamp(),
-        });
+// Admin rejects
+export async function rejectPayment(requestId: string, reason: string): Promise<void> {
+  await updateDoc(doc(db, 'payment_requests', requestId), {
+    status: 'rejected',
+    rejectionReason: reason,
+    reviewedAt: serverTimestamp(),
+  });
+}
 
-        // Activate user profile
-        await setActivated(uid);
+// Check if user already has a pending/approved request
+export async function getUserPaymentStatus(
+  uid: string
+): Promise<PaymentRequest | null> {
+  const { getDocs } = await import('firebase/firestore');
+  const q = query(
+    collection(db, 'payment_requests'),
+    where('userId', '==', uid),
+    orderBy('submittedAt', 'desc')
+  );
+  const snap = await getDocs(q);
+  if (snap.empty) return null;
+  const d = snap.docs[0];
+  return { id: d.id, ...d.data() } as PaymentRequest;
+}
 
-        resolve({ transactionId: response.razorpay_payment_id });
-      },
-      modal: { ondismiss: () => reject(new Error('Payment cancelled')) },
-    });
-    rzp.open();
+// Real-time listener for all payment requests (admin use)
+export function listenAllPaymentRequests(
+  cb: (requests: PaymentRequest[]) => void
+): Unsubscribe {
+  const q = query(
+    collection(db, 'payment_requests'),
+    orderBy('submittedAt', 'desc')
+  );
+  return onSnapshot(q, snap => {
+    const requests = snap.docs.map(d => ({
+      id: d.id,
+      ...d.data(),
+      submittedAt: d.data().submittedAt?.toDate?.()?.toISOString() ?? '',
+      reviewedAt: d.data().reviewedAt?.toDate?.()?.toISOString(),
+    })) as PaymentRequest[];
+    cb(requests);
   });
 }
