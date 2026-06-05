@@ -83,6 +83,11 @@ export default function AuthPage() {
           <p className="text-xs text-gray-500">Your data is secure and never shared without consent.</p>
         </div>
 
+                <div className="flex items-center justify-center gap-3 mt-4 text-xs text-gray-400">
+          <a href="/terms" className="hover:text-pink-600 transition-colors">Terms</a>
+          <span>·</span>
+          <a href="/privacy" className="hover:text-pink-600 transition-colors">Privacy</a>
+        </div>
         <div className="text-center mt-4">
           <button
             onClick={() => navigate('/admin')}
@@ -95,3 +100,4 @@ export default function AuthPage() {
     </div>
   );
 }
+

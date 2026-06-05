@@ -7,12 +7,19 @@ import { VerifiedBadge, InterestStatusBadge } from '../components/ui/Badge';
 import { PaywallModal } from '../components/payment/PaywallModal';
 import { Modal } from '../components/ui/Modal';
 import { useApp } from '../context/AppContext';
+import { logProfileView } from '../services/profileViews.service';
 import { MOCK_PROFILES } from '../data/mockProfiles';
 
 export default function ViewProfilePage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { state, sendInterest } = useApp();
+  const { firebaseUser } = useApp();
+  React.useEffect(() => {
+    if (firebaseUser && id && firebaseUser.uid !== id) {
+      logProfileView(firebaseUser.uid, id).catch(() => {});
+    }
+  }, [firebaseUser, id]);
   const [showPaywall, setShowPaywall] = useState(false);
   const [showReport, setShowReport] = useState(false);
   const [reported, setReported] = useState(false);
@@ -220,3 +227,4 @@ export default function ViewProfilePage() {
     </AppLayout>
   );
 }
+

@@ -103,3 +103,27 @@ export function listenAllPaymentRequests(
     cb(requests);
   });
 }
+
+// Ping admin WhatsApp after payment submitted (fire and forget)
+export async function notifyAdminNewPayment(
+  payerName: string, mobile: string, plan: string, amount: number, transactionId: string
+): Promise<void> {
+  const { WORKER_URL } = await import('../config/constants');
+  fetch(`${WORKER_URL}/api/notify/new-payment`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ payerName, mobile, plan, amount, transactionId }),
+  }).catch(() => {}); // fire and forget
+}
+
+// Send approval email when admin approves
+export async function sendApprovalEmail(
+  toEmail: string, toName: string, plan: string, amount: number, transactionId: string
+): Promise<void> {
+  const { WORKER_URL } = await import('../config/constants');
+  await fetch(`${WORKER_URL}/api/notify/approval-email`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ toEmail, toName, plan, amount, transactionId }),
+  });
+}

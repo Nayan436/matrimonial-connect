@@ -1,20 +1,38 @@
 import React, { useState, useEffect } from 'react';
+import { listenAllVerificationRequests, approveVerification, rejectVerification, type VerificationRequest } from '../services/verification.service';
+
 import { useNavigate } from 'react-router-dom';
+import { listenAllVerificationRequests, approveVerification, rejectVerification, type VerificationRequest } from '../services/verification.service';
+
 import {
   Users, CheckCircle, XCircle, LogOut, Search, ExternalLink, Clock, RefreshCw,
 } from 'lucide-react';
+import { listenAllVerificationRequests, approveVerification, rejectVerification, type VerificationRequest } from '../services/verification.service';
+
 import { Button } from '../components/ui/Button';
+import { listenAllVerificationRequests, approveVerification, rejectVerification, type VerificationRequest } from '../services/verification.service';
+
 import { Input } from '../components/ui/Input';
+import { listenAllVerificationRequests, approveVerification, rejectVerification, type VerificationRequest } from '../services/verification.service';
+
 import { Badge } from '../components/ui/Badge';
+import { listenAllVerificationRequests, approveVerification, rejectVerification, type VerificationRequest } from '../services/verification.service';
+
 import { Modal } from '../components/ui/Modal';
+import { listenAllVerificationRequests, approveVerification, rejectVerification, type VerificationRequest } from '../services/verification.service';
+
 import { adminLogout, isAdminLoggedIn } from './AdminLoginPage';
+import { listenAllVerificationRequests, approveVerification, rejectVerification, type VerificationRequest } from '../services/verification.service';
+
 import {
   listenAllPaymentRequests, approvePayment, rejectPayment,
   type PaymentRequest,
 } from '../services/payment.service';
+import { listenAllVerificationRequests, approveVerification, rejectVerification, type VerificationRequest } from '../services/verification.service';
+
 import { formatTime } from '../utils/storage';
 
-type Tab = 'payments' | 'users';
+type Tab = 'payments' | 'verifications' | 'users';
 
 export default function AdminPage() {
   const navigate = useNavigate();
@@ -135,3 +153,4 @@ export default function AdminPage() {
     </div>
   );
 }
+

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Edit3, Settings, Bell, Shield, LogOut, ChevronRight, Camera, Star } from 'lucide-react';
+import { useNavigate, Link } from 'react-router-dom';
+import { Eye, Edit3, Settings, Bell, Shield, LogOut, ChevronRight, Camera, Star } from 'lucide-react';
 import { AppLayout, PageHeader } from '../components/layout/AppLayout';
 import { Button } from '../components/ui/Button';
 import { VerifiedBadge, PremiumBadge } from '../components/ui/Badge';
@@ -8,6 +8,9 @@ import { PaywallModal } from '../components/payment/PaywallModal';
 import { Modal } from '../components/ui/Modal';
 import { useApp } from '../context/AppContext';
 import { calcProfileCompletion } from '../utils/storage';
+import { VerificationModal } from '../components/profile/VerificationModal';
+import { getMyViewers } from '../services/profileViews.service';
+import { getProfileById } from '../services/profile.service';
 
 export default function MyProfilePage() {
   const navigate = useNavigate();
@@ -15,7 +18,17 @@ export default function MyProfilePage() {
   const { userProfile, isActivated } = state;
   const [showPaywall, setShowPaywall] = useState(false);
   const [showLogout, setShowLogout] = useState(false);
+  const [showVerify, setShowVerify] = useState(false);
+  const [viewers, setViewers] = useState<Array<{ id: string; firstName: string; photos: string[]; occupation: string; city: string }>>([]);
 
+  React.useEffect(() => {
+    if (!state.isActivated || !firebaseUser) return;
+    getMyViewers(firebaseUser.uid).then(views => {
+      Promise.all(views.slice(0, 6).map(v => getProfileById(v.viewerId))).then(profiles => {
+        setViewers(profiles.filter(Boolean) as Array<{ id: string; firstName: string; photos: string[]; occupation: string; city: string }>);
+      });
+    });
+  }, [state.isActivated, firebaseUser]);
   const completion = userProfile ? calcProfileCompletion(userProfile) : 0;
 
   const settingsGroups = [
@@ -192,7 +205,49 @@ export default function MyProfilePage() {
         </div>
       </div>
 
-      {/* Paywall */}
+              {/* Profile verification */}
+        {!userProfile?.isVerified && (
+          <div className="bg-blue-50 border border-blue-200 rounded-3xl p-4 shadow-sm mb-0">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-blue-100 rounded-2xl flex items-center justify-center flex-shrink-0">
+                <Eye size={18} className="text-blue-600" />
+              </div>
+              <div className="flex-1">
+                <p className="font-semibold text-blue-900 text-sm">Get Verified</p>
+                <p className="text-xs text-blue-600">Blue badge boosts your profile trust</p>
+              </div>
+              <button onClick={() => setShowVerify(true)}
+                className="bg-blue-600 text-white text-xs font-semibold px-3 py-1.5 rounded-xl">
+                Verify
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Who viewed me */}
+        {state.isActivated && viewers.length > 0 && (
+          <div className="bg-white rounded-3xl p-4 shadow-sm">
+            <h3 className="font-bold text-gray-900 mb-3 text-sm">Who viewed your profile</h3>
+            <div className="grid grid-cols-3 gap-2">
+              {viewers.map(v => (
+                <Link key={v.id} to={`/profile/${v.id}`} className="text-center">
+                  <img src={v.photos?.[0] ?? ''} alt={v.firstName} className="w-full aspect-square object-cover rounded-2xl mb-1" />
+                  <p className="text-xs font-medium text-gray-800 truncate">{v.firstName}</p>
+                  <p className="text-[10px] text-gray-500 truncate">{v.city}</p>
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
+        {state.isActivated && viewers.length === 0 && (
+          <div className="bg-white rounded-3xl p-4 shadow-sm text-center">
+            <Eye size={24} className="text-gray-200 mx-auto mb-2" />
+            <p className="text-sm text-gray-500">No profile views yet</p>
+          </div>
+        )}
+
+        {/* Paywall */}
+        {{/* Paywall */}
       <PaywallModal open={showPaywall} onClose={() => setShowPaywall(false)} />
 
       {/* Logout confirm */}
@@ -206,3 +261,7 @@ export default function MyProfilePage() {
     </AppLayout>
   );
 }
+
+
+
+
